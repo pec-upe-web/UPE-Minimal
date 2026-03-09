@@ -74,7 +74,7 @@ document.addEventListener('mousemove', (e) => {
     cursor.style.top = e.clientY + 'px';
 });
 
-document.querySelectorAll('a, .park-card, .logo-img, .philosophy-card, .region-path[data-city]').forEach(el => {
+document.querySelectorAll('a, .park-card, .logo-img, .accordion-header, .region-path[data-city]').forEach(el => {
     el.addEventListener('mouseenter', () => cursor.classList.add('hovered'));
     el.addEventListener('mouseleave', () => cursor.classList.remove('hovered'));
 });
@@ -84,7 +84,23 @@ const observer = new IntersectionObserver((entries) => {
 }, { threshold: 0.1 });
 document.querySelectorAll('.reveal-up').forEach(el => observer.observe(el));
 
-// ── 4. 地圖與列表雙向互動 ──
+// ── 4. 手風琴 (Accordion) 切換 ──
+document.querySelectorAll('.accordion-header').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const item = btn.parentElement;
+        const isOpen = item.classList.contains('open');
+
+        // Close all other items
+        document.querySelectorAll('.accordion-item.open').forEach(openItem => {
+            if (openItem !== item) openItem.classList.remove('open');
+        });
+
+        // Toggle current item
+        item.classList.toggle('open', !isOpen);
+    });
+});
+
+// ── 5. 地圖與列表雙向互動 ──
 const svgEl = document.getElementById('taiwan-svg');
 const hlClasses =['hl-north', 'hl-central', 'hl-south', 'hl-east'];
 const parkCards = document.querySelectorAll('.park-card');
@@ -96,35 +112,52 @@ const detailEn = document.getElementById('detail-en');
 const detailLand = document.getElementById('detail-land');
 const detailBuild = document.getElementById('detail-build');
 const detailImg = document.getElementById('detail-img');
-const swipeDotsEl = document.getElementById('swipe-dots');
 
 let currentDetailName = "";
 let currentImgIndex = 0;
-let currentParkIndex = 4; // 預設新市物流園區
-let autoPlayTimer = null;
-const AUTO_PLAY_INTERVAL = 5500;
 
-// ── 圖片指示點 ──
+// ── Swipe Dots ──
+const swipeDotsEl = document.getElementById('swipe-dots');
+
 function renderDots(total) {
+    if (!swipeDotsEl) return;
     swipeDotsEl.innerHTML = '';
     for (let i = 0; i < total; i++) {
         const dot = document.createElement('span');
         dot.className = 'swipe-dot' + (i === 0 ? ' active' : '');
-        dot.addEventListener('click', () => { stopAutoPlay(); showImageByIndex(i); startAutoPlay(); });
+        dot.addEventListener('click', () => showImageByIndex(i));
         swipeDotsEl.appendChild(dot);
     }
 }
+
 function updateDots(index) {
-    swipeDotsEl.querySelectorAll('.swipe-dot').forEach((d, i) => d.classList.toggle('active', i === index));
+    if (!swipeDotsEl) return;
+    swipeDotsEl.querySelectorAll('.swipe-dot').forEach((dot, i) => {
+        dot.classList.toggle('active', i === index);
+    });
 }
 
-// ── 圖片自動輪播 ──
+// ── 自動輪播 ──
+let autoPlayTimer = null;
+const AUTO_PLAY_INTERVAL = 5500; // ms
+
 function startAutoPlay() {
     stopAutoPlay();
-    autoPlayTimer = setInterval(() => showImageByIndex(currentImgIndex + 1), AUTO_PLAY_INTERVAL);
+    autoPlayTimer = setInterval(() => {
+        if (!currentDetailName) return;
+        const cleanName = currentDetailName.replace(/\s+/g, '');
+        const data = parkData[cleanName];
+        if (data && data.img.length > 1) {
+            showImageByIndex(currentImgIndex + 1);
+        }
+    }, AUTO_PLAY_INTERVAL);
 }
+
 function stopAutoPlay() {
-    if (autoPlayTimer) { clearInterval(autoPlayTimer); autoPlayTimer = null; }
+    if (autoPlayTimer) {
+        clearInterval(autoPlayTimer);
+        autoPlayTimer = null;
+    }
 }
 
 function showImageByIndex(index) {
@@ -135,10 +168,11 @@ function showImageByIndex(index) {
 
     const images = data.img;
     currentImgIndex = ((index % images.length) + images.length) % images.length;
+    const src = images[currentImgIndex];
 
     detailImg.classList.remove('img-crossfade');
     void detailImg.offsetWidth;
-    detailImg.src = images[currentImgIndex];
+    detailImg.src = src;
     detailImg.classList.add('img-crossfade');
     updateDots(currentImgIndex);
 }
@@ -149,12 +183,11 @@ function updateDetailView(card) {
     if (currentDetailName === rawName) return;
     currentDetailName = rawName;
     currentImgIndex = 0;
-    currentParkIndex = Array.from(parkCards).indexOf(card);
 
     const cleanName = rawName.replace(/\s+/g, '');
     const data = parkData[cleanName];
 
-    if (data) {
+    if(data) {
         detailTitle.innerText = rawName;
         detailEn.innerText = data.en;
         detailLand.innerText = data.land;
@@ -167,18 +200,6 @@ function updateDetailView(card) {
         void detailSection.offsetWidth;
         detailSection.classList.add('fade-in');
     }
-}
-
-// ── 園區切換（‹ › 按鈕 & 文字滑動）──
-function navigatePark(direction) {
-    const total = parkCards.length;
-    currentParkIndex = ((currentParkIndex + direction) % total + total) % total;
-    const targetCard = parkCards[currentParkIndex];
-    parkCards.forEach(c => c.classList.remove('active'));
-    targetCard.classList.add('active');
-    setHighlight(targetCard.getAttribute('data-region'), targetCard.getAttribute('data-city'));
-    currentDetailName = ''; // 強制重新渲染
-    updateDetailView(targetCard);
 }
 
 function changeImage(direction) {
@@ -233,36 +254,141 @@ paths.forEach(path => {
 setHighlight('south', 'tainan');
 window.addEventListener('DOMContentLoaded', () => {
     const defaultCard = document.querySelector('.park-card.active');
-    if (defaultCard) updateDetailView(defaultCard);
+    if(defaultCard) updateDetailView(defaultCard);
 
-    // ‹ › 園區切換按鈕
-    document.getElementById('park-prev').addEventListener('click', () => navigatePark(-1));
-    document.getElementById('park-next').addEventListener('click', () => navigatePark(1));
-
-    // 文字區左右滑切換園區（觸控）
-    const textCol = document.querySelector('.detail-text-col');
-    let txStart = 0;
-    textCol.addEventListener('touchstart', e => { txStart = e.touches[0].clientX; }, { passive: true });
-    textCol.addEventListener('touchend', e => {
-        const dx = e.changedTouches[0].clientX - txStart;
-        if (Math.abs(dx) > 40) navigatePark(dx < 0 ? 1 : -1);
-    });
-});
-
-// ── 漢堡選單 ──
-const navToggle = document.getElementById('nav-toggle');
-const navEl = document.querySelector('nav');
-const navMenuEl = document.querySelector('.nav-menu');
-
-if (navToggle) {
-    navToggle.addEventListener('click', () => {
-        navEl.classList.toggle('menu-open');
-    });
-    navMenuEl.querySelectorAll('a').forEach(link => {
-        link.addEventListener('click', () => {
-            navEl.classList.remove('menu-open');
+    document.querySelectorAll('.img-nav').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const dir = parseInt(btn.dataset.direction, 10) || 1;
+            changeImage(dir);
+            // 手動操作後重新計時，避免馬上自動跳圖
+            startAutoPlay();
         });
     });
+
+    // ── Touch Swipe for detail image ──
+    const imageCol = document.querySelector('.detail-image-col');
+    if (imageCol) {
+        let startX = 0;
+        let startY = 0;
+
+        imageCol.addEventListener('touchstart', (e) => {
+            startX = e.touches[0].clientX;
+            startY = e.touches[0].clientY;
+        }, { passive: true });
+
+        imageCol.addEventListener('touchend', (e) => {
+            const deltaX = e.changedTouches[0].clientX - startX;
+            const deltaY = e.changedTouches[0].clientY - startY;
+            // 水平滑動距離 > 40px 且大於垂直滑動才觸發
+            if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+                changeImage(deltaX < 0 ? 1 : -1);
+            }
+        }, { passive: true });
+    }
+});
+
+// ── 最新消息 Modal ──
+const newsModal    = document.getElementById('news-modal');
+const modalOverlay = newsModal.querySelector('.news-modal-overlay');
+const modalClose   = newsModal.querySelector('.news-modal-close');
+const modalTag     = document.getElementById('modal-tag');
+const modalDate    = document.getElementById('modal-date');
+const modalTitle   = document.getElementById('modal-title');
+const modalBody    = document.getElementById('modal-body');
+
+function openNewsModal(item) {
+    modalTag.textContent   = item.dataset.tag   || '';
+    modalDate.textContent  = item.dataset.date  || '';
+    modalTitle.textContent = item.dataset.title || '';
+    modalBody.innerHTML    = `<p>${item.dataset.content || ''}</p>`;
+    newsModal.classList.add('open');
+    newsModal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    cursor.style.display = 'none';
+}
+function closeNewsModal() {
+    newsModal.classList.remove('open');
+    newsModal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+    cursor.style.display = '';
+}
+
+document.querySelectorAll('.news-item').forEach(item => {
+    item.addEventListener('click', () => openNewsModal(item));
+});
+modalOverlay.addEventListener('click', closeNewsModal);
+modalClose.addEventListener('click', closeNewsModal);
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeNewsModal(); });
+
+// ── 漢堡選單 (Hamburger Menu) ──
+const navToggle = document.getElementById('nav-toggle');
+const navMenu   = document.getElementById('nav-menu');
+const navEl     = document.querySelector('nav');
+
+function closeNavMenu() {
+    navMenu.classList.remove('open');
+    navToggle.classList.remove('open');
+    if (navEl) navEl.classList.remove('menu-open');
+    navToggle.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+}
+
+if (navToggle && navMenu) {
+    navToggle.addEventListener('click', () => {
+        const isOpen = navMenu.classList.toggle('open');
+        navToggle.classList.toggle('open', isOpen);
+        if (navEl) navEl.classList.toggle('menu-open', isOpen);
+        navToggle.setAttribute('aria-expanded', String(isOpen));
+        document.body.style.overflow = isOpen ? 'hidden' : '';
+    });
+    // 點選選單連結後關閉選單
+    navMenu.querySelectorAll('a').forEach(link => {
+        link.addEventListener('click', closeNavMenu);
+    });
+}
+
+// ── 切換園區 ──
+function navigatePark(direction) {
+    const cards = Array.from(document.querySelectorAll('.park-card'));
+    const activeIndex = cards.findIndex(c => c.classList.contains('active'));
+    const nextIndex = ((activeIndex + direction) + cards.length) % cards.length;
+    const nextCard = cards[nextIndex];
+
+    cards.forEach(c => c.classList.remove('active'));
+    nextCard.classList.add('active');
+    setHighlight(nextCard.getAttribute('data-region'), nextCard.getAttribute('data-city'));
+    updateDetailView(nextCard);
+
+    // 手機：捲動 location-list 容器（不用 scrollIntoView 避免頁面跳動）
+    const list = document.querySelector('.location-list');
+    if (list) {
+        const cardLeft = nextCard.offsetLeft - list.offsetLeft;
+        list.scrollTo({ left: cardLeft - (list.clientWidth - nextCard.offsetWidth) / 2, behavior: 'smooth' });
+    }
+}
+
+// ── Park Nav 按鈕 ──
+document.getElementById('park-prev')?.addEventListener('click', () => navigatePark(-1));
+document.getElementById('park-next')?.addEventListener('click', () => navigatePark(1));
+
+// ── 文字面板 Touch Swipe（切換園區，僅綁定文字區避免與圖片滑動衝突） ──
+const detailTextCol = document.querySelector('.detail-text-col');
+if (detailTextCol) {
+    let pStartX = 0;
+    let pStartY = 0;
+
+    detailTextCol.addEventListener('touchstart', (e) => {
+        pStartX = e.touches[0].clientX;
+        pStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    detailTextCol.addEventListener('touchend', (e) => {
+        const deltaX = e.changedTouches[0].clientX - pStartX;
+        const deltaY = e.changedTouches[0].clientY - pStartY;
+        if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY)) {
+            navigatePark(deltaX < 0 ? 1 : -1);
+        }
+    }, { passive: true });
 }
 
 // 通用錨點平滑捲動
@@ -275,39 +401,3 @@ document.querySelectorAll('a[href^="#"]:not(.park-card)').forEach(anchor => {
         if (t) window.scrollTo({ top: t.offsetTop - 80, behavior: 'smooth' });
     });
 });
-
-// ── 最新消息 Modal ──
-const newsModal    = document.getElementById('news-modal');
-const modalOverlay = newsModal ? newsModal.querySelector('.news-modal-overlay') : null;
-const modalClose   = newsModal ? newsModal.querySelector('.news-modal-close') : null;
-const modalTag     = document.getElementById('modal-tag');
-const modalDate    = document.getElementById('modal-date');
-const modalTitle   = document.getElementById('modal-title');
-const modalBody    = document.getElementById('modal-body');
-
-function openNewsModal(item) {
-    if (!newsModal) return;
-    modalTag.textContent   = item.dataset.tag   || '';
-    modalDate.textContent  = item.dataset.date  || '';
-    modalTitle.textContent = item.dataset.title || '';
-    modalBody.innerHTML    = `<p>${item.dataset.content || ''}</p>`;
-    newsModal.classList.add('open');
-    newsModal.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
-    if (cursor) cursor.style.display = 'none';
-}
-
-function closeNewsModal() {
-    if (!newsModal) return;
-    newsModal.classList.remove('open');
-    newsModal.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-    if (cursor) cursor.style.display = '';
-}
-
-document.querySelectorAll('.news-item').forEach(item => {
-    item.addEventListener('click', () => openNewsModal(item));
-});
-if (modalOverlay) modalOverlay.addEventListener('click', closeNewsModal);
-if (modalClose)   modalClose.addEventListener('click', closeNewsModal);
-document.addEventListener('keydown', e => { if (e.key === 'Escape') closeNewsModal(); });
