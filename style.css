@@ -626,6 +626,10 @@ section { padding: 140px 10%; }
 .reveal-up { opacity: 0; transform: translateY(40px); transition: var(--transition-smooth); }
 .reveal-up.active { opacity: 1; transform: translateY(0); }
 
+/* Hero reveal — 保留 hero-title 的 -50% 垂直置中 transform */
+.hero-title.reveal-up { transform: translateY(calc(-50% + 40px)); }
+.hero-title.reveal-up.active { transform: translateY(-50%); }
+
 /* ── Responsive ── */
 @media (max-width: 1024px) {
     section { padding: 80px 6%; }
